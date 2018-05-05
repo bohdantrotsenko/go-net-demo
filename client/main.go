@@ -9,7 +9,7 @@ import (
 	"strconv"
 )
 
-func run(url string, N int) error {
+func run(url string, N int, sendDelete bool) error {
 	errChan := make(chan error, 4)
 	resChan := make(chan int, N)
 
@@ -56,17 +56,21 @@ func run(url string, N int) error {
 	}
 	log.Printf("sent %d POST requests\n", N)
 
-	delReq, err := http.NewRequest("DELETE", url, nil)
-	if err != nil {
-		return fmt.Errorf("create DELETE request: %s", err)
-	}
+	if sendDelete {
+		delReq, err := http.NewRequest("DELETE", url, nil)
+		if err != nil {
+			return fmt.Errorf("create DELETE request: %s", err)
+		}
 
-	delResp, err := http.DefaultClient.Do(delReq)
-	if delResp != nil {
-		defer delResp.Body.Close()
-	}
-	if err != nil {
-		return fmt.Errorf("send DELETE request: %s", err)
+		delResp, err := http.DefaultClient.Do(delReq)
+		if delResp != nil {
+			defer delResp.Body.Close()
+		}
+		if err != nil {
+			return fmt.Errorf("send DELETE request: %s", err)
+		}
+	} else {
+		log.Printf("not sending -X DELETE, please run manually: curl -X DELETE %s\n", url)
 	}
 
 	// DELETE is sent, wait for results
@@ -75,9 +79,13 @@ func run(url string, N int) error {
 	for i := 0; i < N; i++ {
 		select {
 		case data := <-resChan:
-			flags[data] = flags[data] + 1
-			if i > 0 && i%100 == 99 {
-				log.Printf("received replies from %d POST requests\n", i+1)
+			if data >= N {
+				log.Printf("got id = %d, expected smth < %d\n", data, N)
+			} else {
+				flags[data] = flags[data] + 1
+				if i > 0 && i%100 == 99 {
+					log.Printf("received replies from %d POST requests\n", i+1)
+				}
 			}
 		case err := <-errChan:
 			return err
@@ -99,8 +107,9 @@ func run(url string, N int) error {
 func main() {
 	url := flag.String("url", "http://localhost:48787", "server's endpoint")
 	N := flag.Int("N", 5, "number of requests")
+	sendDelete := flag.Bool("del", false, "send DELETE command too")
 	flag.Parse()
-	if err := run(*url, int(*N)); err != nil {
+	if err := run(*url, int(*N), *sendDelete); err != nil {
 		log.Fatal(err)
 	}
 }

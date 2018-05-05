@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // feel free to uncomment some logs to play
@@ -15,6 +16,18 @@ type srv struct {
 	counter int32
 	flag    chan struct{}
 	closer  sync.Once
+}
+
+func (s *srv) printStats() {
+	lastCounter := int32(-1)
+	for {
+		time.Sleep(time.Second)
+		curCounter := atomic.LoadInt32(&s.counter)
+		if curCounter != lastCounter {
+			log.Printf("Currently handling %d connections.\n", curCounter)
+			lastCounter = curCounter
+		}
+	}
 }
 
 func (s *srv) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -51,6 +64,8 @@ func run(addr string) error {
 	s := &srv{
 		flag: make(chan struct{}),
 	}
+	go s.printStats()
+	log.Printf("starting listening at %s\n", addr)
 	return http.ListenAndServe(addr, s)
 }
 
